@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Topic Rankings</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .tab-container {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .tab {
+            padding: 10px 20px;
+            border: none;
+            background: #f0f0f0;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .tab.active {
+            background: #007bff;
+            color: white;
+        }
+        #visualization {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Topic Rankings</h1>
+    <div class="tab-container">
+        <button class="tab active" onclick="switchMetric('Total')">Overall Score</button>
+        <button class="tab" onclick="switchMetric('Behavioral Necessity')">Behavioral Necessity</button>
+        <button class="tab" onclick="switchMetric('Impact on Nature')">Impact on Nature</button>
+        <button class="tab" onclick="switchMetric('Impact on Human Welfare')">Impact on Human Welfare</button>
+    </div>
+    <div id="visualization"></div>
+
+    <script>
+        let currentData = null;
+        let currentMetric = 'Total';
+
+        function normalizeTopicName(topic) {
+            if (!topic) return null;
+            let normalized = topic.replace('#', '').trim();
+            if (/^\d/.test(normalized)) {
+                normalized = normalized.split(':')[1].trim();
+            }
+            if (normalized === 'Possible Points') return null;
+            if (normalized === 'Indigenous Tenure') return 'Indigenous Tenure';
+            if (normalized === 'Marine carbon sinks') return 'Marine Carbon Sinks';
+            return normalized;
+        }
+
+        function processScoreSheet(data, filename) {
+            try {
+                // Find judge name
+                const judgeRow = data.find(row => row[0]?.includes('Scored by:'));
+                const judgeName = judgeRow ? judgeRow[0].replace('Scored by:', '').trim() : 'Unknown';
+
+                // Find criteria row
+                const criteriaIdx = data.findIndex(row => row[0] === 'Criteria');
+                if (criteriaIdx === -1) return null;
+
+                // Get topics
+                const topics = data[criteriaIdx].slice(1).map(normalizeTopicName).filter(Boolean);
+
+                // Extract scores
+                const scores = {};
+                const criteria = ['Behavioral Necessity', 'Impact on Nature', 'Impact on Human Welfare'];
+                
+                criteria.forEach(criterion => {
+                    const row = data.find(r => r[0]?.trim() === criterion);
+                    if (row) {
+                        scores[criterion] = row.slice(1, topics.length + 1).map(score => parseFloat(score) || 0);
+                    }
+                });
+
+                // Create records
+                const records = [];
+                topics.forEach((topic, i) => {
+                    if (!topic) return;
+                    const behavioralNecessity = scores['Behavioral Necessity']?.[i] || 0;
+                    const impactNature = scores['Impact on Nature']?.[i] || 0;
+                    const impactHumanWelfare = scores['Impact on Human Welfare']?.[i] || 0;
+                    
+                    records.push({
+                        judge: judgeName,
+                        topic,
+                        'Behavioral Necessity': behavioralNecessity,
+                        'Impact on Nature': impactNature,
+                        'Impact on Human Welfare': impactHumanWelfare,
+                        'Total': behavioralNecessity + impactNature + impactHumanWelfare
+                    });
+                });
+
+                return records;
+            } catch (error) {
+                console.error(`Error processing ${filename}:`, error);
+                return null;
+            }
+        }
+
+        function adjustScores(allScores) {
+            const metrics = ['Behavioral Necessity', 'Impact on Nature', 'Impact on Human Welfare', 'Total'];
+            
+            // Calculate judge averages
+            const judgeGroups = _.groupBy(allScores, 'judge');
+            const judgeAverages = {};
+            Object.entries(judgeGroups).forEach(([judge, scores]) => {
+                judgeAverages[judge] = {};
+                metrics.forEach(metric => {
+                    judgeAverages[judge][metric] = _.meanBy(scores, metric);
+                });
+            });
+
+            // Calculate global averages
+            const globalAverages = {};
+            metrics.forEach(metric => {
+                globalAverages[metric] = _.meanBy(allScores, metric);
+            });
+
+            // Adjust scores
+            return allScores.map(score => {
+                const adjusted = { ...score };
+                metrics.forEach(metric => {
+                    const adjustment = judgeAverages[score.judge][metric] - globalAverages[metric];
+                    adjusted[metric] -= adjustment;
+                });
+                return adjusted;
+            });
+        }
+
+        function createVisualization(adjustedScores, metric) {
+            // Calculate topic averages
+            const topicGroups = _.groupBy(adjustedScores, 'topic');
+            const topicAverages = Object.entries(topicGroups).map(([topic, scores]) => ({
+                topic,
+                'Behavioral Necessity': _.meanBy(scores, 'Behavioral Necessity'),
+                'Impact on Nature': _.meanBy(scores, 'Impact on Nature'),
+                'Impact on Human Welfare': _.meanBy(scores, 'Impact on Human Welfare'),
+                'Total': _.meanBy(scores, 'Total')
+            }));
+
+            // Sort by current metric
+            const sortedData = _.orderBy(topicAverages, metric, 'desc');
+
+            // Create table data
+            const data = [{
+                type: 'table',
+                header: {
+                    values: ['Rank', 'Topic', 'Behavioral', 'Nature', 'Human', 'Total'],
+                    align: 'left',
+                    font: { size: 12 },
+                    fill: { color: 'lightgray' }
+                },
+                cells: {
+                    values: [
+                        Array.from({ length: sortedData.length }, (_, i) => i + 1),
+                        sortedData.map(d => d.topic),
+                        sortedData.map(d => d['Behavioral Necessity'].toFixed(1)),
+                        sortedData.map(d => d['Impact on Nature'].toFixed(1)),
+                        sortedData.map(d => d['Impact on Human Welfare'].toFixed(1)),
+                        sortedData.map(d => d['Total'].toFixed(1))
+                    ],
+                    align: 'left',
+                    font: { size: 11 },
+                    fill: {
+                        color: [
+                            'white',
+                            'white',
+                            getColorScale(sortedData.map(d => d['Behavioral Necessity'])),
+                            getColorScale(sortedData.map(d => d['Impact on Nature'])),
+                            getColorScale(sortedData.map(d => d['Impact on Human Welfare'])),
+                            Array(sortedData.length).fill('lightgray')
+                        ]
+                    }
+                }
+            }];
+
+            const layout = {
+                margin: { l: 0, r: 0, t: 0, b: 0 },
+                height: 35 * sortedData.length
+            };
+
+            Plotly.newPlot('visualization', data, layout);
+        }
+
+        function getColorScale(values) {
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            return values.map(value => {
+                const normalized = (value - min) / (max - min);
+                const r = Math.round(255 * (1 - normalized));
+                const g = Math.round(255 * normalized);
+                return `rgb(${r}, ${g}, 0)`;
+            });
+        }
+
+        function switchMetric(metric) {
+            currentMetric = metric;
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.textContent === metric || 
+                    (tab.textContent === 'Overall Score' && metric === 'Total')) {
+                    tab.classList.add('active');
+                }
+            });
+            if (currentData) {
+                createVisualization(currentData, metric);
+            }
+        }
+
+        // Load and process all files
+        async function loadData() {
+            const files = [
+                'Score Sheet_Larissa.csv', 'Score Sheet_Michelle.csv', 'Score Sheet_MID.csv',
+                'Score Sheet_Natalia.csv', 'Score Sheet_Nikita Patelv2.csv', 'Score Sheet_Philipe.csv',
+                'Score Sheet_Sam.csv', 'Score Sheet_Sania.csv', 'Score Sheet_Zach Hoffman.csv',
+                'Score Sheet_Kristi.csv', 'Score Sheet_Tony.csv', 'Score Sheet_Kevin.csv',
+                'Score Sheet_Fel.csv', 'Score Sheet_KatieH.csv', 'Score Sheet_Kate M.csv',
+                'Score Sheet_Tanmatra.csv', 'Score Sheet_Travis.csv', 'Score Sheet_ Rakhim.csv',
+                'Score Sheet_Anam.csv'
+            ];
+
+            const allScores = [];
+            
+            for (const file of files) {
+                try {
+                    const response = await fetch(file);
+                    const text = await response.text();
+                    const result = Papa.parse(text);
+                    const processed = processScoreSheet(result.data, file);
+                    if (processed) {
+                        allScores.push(...processed);
+                    }
+                } catch (error) {
+                    console.error(`Error loading ${file}:`, error);
+                }
+            }
+
+            if (allScores.length > 0) {
+                currentData = adjustScores(allScores);
+                createVisualization(currentData, currentMetric);
+            } else {
+                document.getElementById('visualization').innerHTML = 'No valid data was processed';
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
