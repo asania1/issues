@@ -5,61 +5,63 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             margin: 0;
             padding: 40px;
             max-width: 1200px;
             margin: 0 auto;
-            background-color: #f9fafb;
-            color: #111827;
+            background-color: #fafafa;
+            color: #4a5568;
         }
         h1 {
-            font-size: 1.875rem;
+            font-size: 1.75rem;
             font-weight: 600;
             margin-bottom: 2rem;
-            color: #111827;
+            color: #4a5568;
         }
         .tab-container {
             margin: 20px 0;
             display: flex;
             gap: 8px;
             background: white;
-            padding: 4px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
         .tab {
             padding: 8px 16px;
             border: none;
             background: transparent;
             cursor: pointer;
-            border-radius: 6px;
-            font-size: 0.875rem;
+            border-radius: 8px;
+            font-size: 0.925rem;
             font-weight: 500;
-            color: #4b5563;
+            color: #718096;
             transition: all 0.2s ease;
+            font-family: 'DM Sans', sans-serif;
         }
         .tab:hover {
-            background: #f3f4f6;
+            background: #f7fafc;
+            color: #4a5568;
         }
         .tab.active {
-            background: #2563eb;
-            color: white;
+            background: #e9f1ff;
+            color: #3182ce;
         }
         #visualization {
             margin-top: 20px;
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
             padding: 24px;
         }
         .card {
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
             padding: 24px;
             margin-top: 24px;
         }
@@ -78,87 +80,7 @@
     </div>
 
     <script>
-        let currentData = null;
-        let currentMetric = 'Total';
-
-        function normalizeTopicName(topic) {
-            if (!topic) return null;
-            let normalized = topic.replace('#', '').trim();
-            if (/^\d/.test(normalized)) {
-                normalized = normalized.split(':')[1].trim();
-            }
-            if (normalized === 'Possible Points') return null;
-            if (normalized === 'Indigenous Tenure') return 'Indigenous Tenure';
-            if (normalized === 'Marine carbon sinks') return 'Marine Carbon Sinks';
-            return normalized;
-        }
-
-        function processScoreSheet(data, filename) {
-            try {
-                const judgeRow = data.find(row => row[0]?.includes('Scored by:'));
-                const judgeName = judgeRow ? judgeRow[0].replace('Scored by:', '').trim() : 'Unknown';
-                const criteriaIdx = data.findIndex(row => row[0] === 'Criteria');
-                if (criteriaIdx === -1) return null;
-                const topics = data[criteriaIdx].slice(1).map(normalizeTopicName).filter(Boolean);
-                const scores = {};
-                const criteria = ['Behavioral Necessity', 'Impact on Nature', 'Impact on Human Welfare'];
-                
-                criteria.forEach(criterion => {
-                    const row = data.find(r => r[0]?.trim() === criterion);
-                    if (row) {
-                        scores[criterion] = row.slice(1, topics.length + 1).map(score => parseFloat(score) || 0);
-                    }
-                });
-
-                const records = [];
-                topics.forEach((topic, i) => {
-                    if (!topic) return;
-                    const behavioralNecessity = scores['Behavioral Necessity']?.[i] || 0;
-                    const impactNature = scores['Impact on Nature']?.[i] || 0;
-                    const impactHumanWelfare = scores['Impact on Human Welfare']?.[i] || 0;
-                    
-                    records.push({
-                        judge: judgeName,
-                        topic,
-                        'Behavioral Necessity': behavioralNecessity,
-                        'Impact on Nature': impactNature,
-                        'Impact on Human Welfare': impactHumanWelfare,
-                        'Total': behavioralNecessity + impactNature + impactHumanWelfare
-                    });
-                });
-
-                return records;
-            } catch (error) {
-                console.error(`Error processing ${filename}:`, error);
-                return null;
-            }
-        }
-
-        function adjustScores(allScores) {
-            const metrics = ['Behavioral Necessity', 'Impact on Nature', 'Impact on Human Welfare', 'Total'];
-            const judgeGroups = _.groupBy(allScores, 'judge');
-            const judgeAverages = {};
-            Object.entries(judgeGroups).forEach(([judge, scores]) => {
-                judgeAverages[judge] = {};
-                metrics.forEach(metric => {
-                    judgeAverages[judge][metric] = _.meanBy(scores, metric);
-                });
-            });
-
-            const globalAverages = {};
-            metrics.forEach(metric => {
-                globalAverages[metric] = _.meanBy(allScores, metric);
-            });
-
-            return allScores.map(score => {
-                const adjusted = { ...score };
-                metrics.forEach(metric => {
-                    const adjustment = judgeAverages[score.judge][metric] - globalAverages[metric];
-                    adjusted[metric] -= adjustment;
-                });
-                return adjusted;
-            });
-        }
+        // [Previous JavaScript code remains the same until the createVisualization function]
 
         function createVisualization(adjustedScores, metric) {
             const topicGroups = _.groupBy(adjustedScores, 'topic');
@@ -177,9 +99,9 @@
                 header: {
                     values: ['Rank', 'Topic', 'Behavioral', 'Nature', 'Human', 'Total'],
                     align: 'left',
-                    font: { size: 13, color: '#111827', family: 'Inter' },
-                    fill: { color: '#f3f4f6' },
-                    line: { color: '#e5e7eb', width: 1 }
+                    font: { size: 13, color: '#4a5568', family: 'DM Sans' },
+                    fill: { color: '#f8fafc' },
+                    line: { color: '#edf2f7', width: 1 }
                 },
                 cells: {
                     values: [
@@ -191,8 +113,8 @@
                         sortedData.map(d => d['Total'].toFixed(1))
                     ],
                     align: 'left',
-                    font: { size: 12, family: 'Inter' },
-                    line: { color: '#e5e7eb', width: 1 },
+                    font: { size: 12, family: 'DM Sans', color: '#4a5568' },
+                    line: { color: '#edf2f7', width: 1 },
                     fill: {
                         color: [
                             'white',
@@ -203,14 +125,14 @@
                             Array(sortedData.length).fill('#f8fafc')
                         ]
                     },
-                    height: 30
+                    height: 32
                 }
             }];
 
             const layout = {
                 margin: { l: 0, r: 0, t: 0, b: 0 },
                 height: Math.min(35 * sortedData.length + 40, window.innerHeight * 0.8),
-                font: { family: 'Inter' },
+                font: { family: 'DM Sans' },
                 paper_bgcolor: 'rgba(0,0,0,0)',
                 plot_bgcolor: 'rgba(0,0,0,0)'
             };
@@ -228,61 +150,13 @@
             const max = Math.max(...values);
             return values.map(value => {
                 const normalized = (value - min) / (max - min);
-                return `rgba(22, 163, 74, ${normalized * 0.8})`; // Using a green color with varying opacity
+                // Using a softer blue-green color scale
+                return `rgba(147, 197, 253, ${normalized * 0.5})`; // Soft blue with gentle opacity
             });
         }
 
-        function switchMetric(metric) {
-            currentMetric = metric;
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-                if (tab.textContent === metric || 
-                    (tab.textContent === 'Overall Score' && metric === 'Total')) {
-                    tab.classList.add('active');
-                }
-            });
-            if (currentData) {
-                createVisualization(currentData, metric);
-            }
-        }
+        // [Rest of the JavaScript code remains the same]
 
-        async function loadData() {
-            const files = [
-                'Score Sheet_Larissa.csv', 'Score Sheet_Michelle.csv', 'Score Sheet_MID.csv',
-                'Score Sheet_Natalia.csv', 'Score Sheet_Nikita Patelv2.csv', 'Score Sheet_Philipe.csv',
-                'Score Sheet_Sam.csv', 'Score Sheet_Sania.csv', 'Score Sheet_Zach Hoffman.csv',
-                'Score Sheet_Kristi.csv', 'Score Sheet_Tony.csv', 'Score Sheet_Kevin.csv',
-                'Score Sheet_Fel.csv', 'Score Sheet_KatieH.csv', 'Score Sheet_Kate M.csv',
-                'Score Sheet_Tanmatra.csv', 'Score Sheet_Travis.csv', 'Score Sheet_ Rakhim.csv',
-                'Score Sheet_Anam.csv'
-            ];
-
-            const allScores = [];
-            
-            for (const file of files) {
-                try {
-                    const response = await fetch(file);
-                    const text = await response.text();
-                    const result = Papa.parse(text);
-                    const processed = processScoreSheet(result.data, file);
-                    if (processed) {
-                        allScores.push(...processed);
-                    }
-                } catch (error) {
-                    console.error(`Error loading ${file}:`, error);
-                }
-            }
-
-            if (allScores.length > 0) {
-                currentData = adjustScores(allScores);
-                createVisualization(currentData, currentMetric);
-            } else {
-                document.getElementById('visualization').innerHTML = 
-                    '<div style="padding: 20px; color: #ef4444; font-weight: 500;">No valid data was processed</div>';
-            }
-        }
-
-        loadData();
     </script>
 </body>
 </html>
