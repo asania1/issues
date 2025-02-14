@@ -150,8 +150,12 @@
             const max = Math.max(...values);
             return values.map(value => {
                 const normalized = (value - min) / (max - min);
-                // Using a softer blue-green color scale
-                return `rgba(147, 197, 253, ${normalized * 0.5})`; // Soft blue with gentle opacity
+                // For lower values: soft orange-red (rgb(251, 146, 60))
+                // For higher values: soft blue (rgb(147, 197, 253))
+                const r = Math.round(251 - (normalized * (251 - 147)));
+                const g = Math.round(146 + (normalized * (197 - 146)));
+                const b = Math.round(60 + (normalized * (253 - 60)));
+                return `rgba(${r}, ${g}, ${b}, 0.5)`;
             });
         }
 
