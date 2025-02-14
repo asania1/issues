@@ -5,44 +5,77 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 40px;
             max-width: 1200px;
             margin: 0 auto;
+            background-color: #f9fafb;
+            color: #111827;
+        }
+        h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            color: #111827;
         }
         .tab-container {
             margin: 20px 0;
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            background: white;
+            padding: 4px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         .tab {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
-            background: #f0f0f0;
+            background: transparent;
             cursor: pointer;
-            border-radius: 4px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #4b5563;
+            transition: all 0.2s ease;
+        }
+        .tab:hover {
+            background: #f3f4f6;
         }
         .tab.active {
-            background: #007bff;
+            background: #2563eb;
             color: white;
         }
         #visualization {
             margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            margin-top: 24px;
         }
     </style>
 </head>
 <body>
     <h1>Topic Rankings</h1>
-    <div class="tab-container">
-        <button class="tab active" onclick="switchMetric('Total')">Overall Score</button>
-        <button class="tab" onclick="switchMetric('Behavioral Necessity')">Behavioral Necessity</button>
-        <button class="tab" onclick="switchMetric('Impact on Nature')">Impact on Nature</button>
-        <button class="tab" onclick="switchMetric('Impact on Human Welfare')">Impact on Human Welfare</button>
+    <div class="card">
+        <div class="tab-container">
+            <button class="tab active" onclick="switchMetric('Total')">Overall Score</button>
+            <button class="tab" onclick="switchMetric('Behavioral Necessity')">Behavioral Necessity</button>
+            <button class="tab" onclick="switchMetric('Impact on Nature')">Impact on Nature</button>
+            <button class="tab" onclick="switchMetric('Impact on Human Welfare')">Impact on Human Welfare</button>
+        </div>
+        <div id="visualization"></div>
     </div>
-    <div id="visualization"></div>
 
     <script>
         let currentData = null;
@@ -62,18 +95,11 @@
 
         function processScoreSheet(data, filename) {
             try {
-                // Find judge name
                 const judgeRow = data.find(row => row[0]?.includes('Scored by:'));
                 const judgeName = judgeRow ? judgeRow[0].replace('Scored by:', '').trim() : 'Unknown';
-
-                // Find criteria row
                 const criteriaIdx = data.findIndex(row => row[0] === 'Criteria');
                 if (criteriaIdx === -1) return null;
-
-                // Get topics
                 const topics = data[criteriaIdx].slice(1).map(normalizeTopicName).filter(Boolean);
-
-                // Extract scores
                 const scores = {};
                 const criteria = ['Behavioral Necessity', 'Impact on Nature', 'Impact on Human Welfare'];
                 
@@ -84,7 +110,6 @@
                     }
                 });
 
-                // Create records
                 const records = [];
                 topics.forEach((topic, i) => {
                     if (!topic) return;
@@ -111,8 +136,6 @@
 
         function adjustScores(allScores) {
             const metrics = ['Behavioral Necessity', 'Impact on Nature', 'Impact on Human Welfare', 'Total'];
-            
-            // Calculate judge averages
             const judgeGroups = _.groupBy(allScores, 'judge');
             const judgeAverages = {};
             Object.entries(judgeGroups).forEach(([judge, scores]) => {
@@ -122,13 +145,11 @@
                 });
             });
 
-            // Calculate global averages
             const globalAverages = {};
             metrics.forEach(metric => {
                 globalAverages[metric] = _.meanBy(allScores, metric);
             });
 
-            // Adjust scores
             return allScores.map(score => {
                 const adjusted = { ...score };
                 metrics.forEach(metric => {
@@ -140,7 +161,6 @@
         }
 
         function createVisualization(adjustedScores, metric) {
-            // Calculate topic averages
             const topicGroups = _.groupBy(adjustedScores, 'topic');
             const topicAverages = Object.entries(topicGroups).map(([topic, scores]) => ({
                 topic,
@@ -150,17 +170,16 @@
                 'Total': _.meanBy(scores, 'Total')
             }));
 
-            // Sort by current metric
             const sortedData = _.orderBy(topicAverages, metric, 'desc');
 
-            // Create table data
             const data = [{
                 type: 'table',
                 header: {
                     values: ['Rank', 'Topic', 'Behavioral', 'Nature', 'Human', 'Total'],
                     align: 'left',
-                    font: { size: 12 },
-                    fill: { color: 'lightgray' }
+                    font: { size: 13, color: '#111827', family: 'Inter' },
+                    fill: { color: '#f3f4f6' },
+                    line: { color: '#e5e7eb', width: 1 }
                 },
                 cells: {
                     values: [
@@ -172,7 +191,8 @@
                         sortedData.map(d => d['Total'].toFixed(1))
                     ],
                     align: 'left',
-                    font: { size: 11 },
+                    font: { size: 12, family: 'Inter' },
+                    line: { color: '#e5e7eb', width: 1 },
                     fill: {
                         color: [
                             'white',
@@ -180,18 +200,27 @@
                             getColorScale(sortedData.map(d => d['Behavioral Necessity'])),
                             getColorScale(sortedData.map(d => d['Impact on Nature'])),
                             getColorScale(sortedData.map(d => d['Impact on Human Welfare'])),
-                            Array(sortedData.length).fill('lightgray')
+                            Array(sortedData.length).fill('#f8fafc')
                         ]
-                    }
+                    },
+                    height: 30
                 }
             }];
 
             const layout = {
                 margin: { l: 0, r: 0, t: 0, b: 0 },
-                height: 35 * sortedData.length
+                height: Math.min(35 * sortedData.length + 40, window.innerHeight * 0.8),
+                font: { family: 'Inter' },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
             };
 
-            Plotly.newPlot('visualization', data, layout);
+            const config = {
+                displayModeBar: false,
+                responsive: true
+            };
+
+            Plotly.newPlot('visualization', data, layout, config);
         }
 
         function getColorScale(values) {
@@ -199,9 +228,7 @@
             const max = Math.max(...values);
             return values.map(value => {
                 const normalized = (value - min) / (max - min);
-                const r = Math.round(255 * (1 - normalized));
-                const g = Math.round(255 * normalized);
-                return `rgb(${r}, ${g}, 0)`;
+                return `rgba(22, 163, 74, ${normalized * 0.8})`; // Using a green color with varying opacity
             });
         }
 
@@ -219,7 +246,6 @@
             }
         }
 
-        // Load and process all files
         async function loadData() {
             const files = [
                 'Score Sheet_Larissa.csv', 'Score Sheet_Michelle.csv', 'Score Sheet_MID.csv',
@@ -251,7 +277,8 @@
                 currentData = adjustScores(allScores);
                 createVisualization(currentData, currentMetric);
             } else {
-                document.getElementById('visualization').innerHTML = 'No valid data was processed';
+                document.getElementById('visualization').innerHTML = 
+                    '<div style="padding: 20px; color: #ef4444; font-weight: 500;">No valid data was processed</div>';
             }
         }
 
